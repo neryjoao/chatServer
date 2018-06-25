@@ -77,7 +77,7 @@ public class Server {
         BufferedReader tBuffer;
         String nick;
         boolean isPrivate;      // TODO private chat
-        String friend;          
+        String friend;
 
         //CONSTRUCTOR
         public ServerWorker(Socket socket) {
@@ -110,7 +110,7 @@ public class Server {
 
                         sendWho();
 
-                    }else {
+                    } else {
 
                         sendAll(message, this);
 
@@ -124,7 +124,7 @@ public class Server {
             }
         }
 
-        public void askNickname(){
+        private void askNickname(){
 
             out.println("Nickname?");
 
@@ -132,6 +132,7 @@ public class Server {
 
                 String nickname = in.readLine();
                 Thread.currentThread().setName(nickname);
+
                 nick = nickname;
                 out.println("Welcome " + nickname + "! You can now start chatting" );
 
@@ -143,13 +144,13 @@ public class Server {
         }
 
 
-        public void send(String message) {
+        private void send(String message) {
 
             out.println(message);
 
         }
 
-        public void sendWho(){
+        private void sendWho(){
 
             send("PEOPLE IN THIS CHAT");
             send("*******************");
@@ -164,9 +165,11 @@ public class Server {
 
         }
 
-        public void privateMessage(){
+        private void privateMessage(){
 
         }
+
+
 
     }
 
