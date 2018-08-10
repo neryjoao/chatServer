@@ -3,7 +3,6 @@ package bootcamp.academiadecodigo.org;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.SQLOutput;
 import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -14,7 +13,8 @@ import java.util.concurrent.Executors;
 public class Server {
 
     ServerSocket serverSocket;
-    LinkedList<ServerWorker> serverWorkers = new LinkedList<>();
+    LinkedList<ServerWorker> serverWorkers = new LinkedList<>();    // TODO use a synchronized map. Faster access with a map.
+
 
     //CONSTRUCTOR
     public Server(int port) {
@@ -46,7 +46,7 @@ public class Server {
                 fixedPool.submit(sw);
 
                 //ADD CLIENT TO THE LIST OF USERS
-                serverWorkers.add(sw);
+                addServerWorker(sw);
 
             } catch (IOException e) {
 
@@ -56,14 +56,24 @@ public class Server {
         }
     }
 
+    public synchronized void addServerWorker(ServerWorker sw) {
+
+        serverWorkers.add(sw);
+
+    }
+
+
     public void sendAll(String message, ServerWorker messenger) {
 
-        for (ServerWorker sw : serverWorkers) {
+        synchronized (serverWorkers) {
 
-            if(!sw.equals(messenger)) {
+            for (ServerWorker sw : serverWorkers) {
 
-                sw.send(Thread.currentThread().getName() + ": " + message);
+                if (!sw.equals(messenger)) {
 
+                    sw.send(Thread.currentThread().getName() + ": " + message);
+
+                }
             }
         }
     }
@@ -74,41 +84,43 @@ public class Server {
         Socket socket;
         PrintWriter out;
         BufferedReader in;
-        BufferedReader tBuffer;
         String nick;
-        boolean isPrivate;      // TODO private chat
-        String friend;
+        boolean isPrivate = false;      // TODO private chat
+        ServerWorker privSw;
 
         //CONSTRUCTOR
-        public ServerWorker(Socket socket) {
+        public ServerWorker(Socket socket) throws IOException {     //Throwing exception to the server where server worker is initiated.
 
             this.socket = socket;
 
-            try {
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-                out = new PrintWriter(socket.getOutputStream(), true);
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                tBuffer = new BufferedReader(new InputStreamReader(System.in));
-
-            }catch(IOException e ){
-                System.out.println(e.getMessage());
-            }
         }
 
 
         @Override
-        public void run() {
+        public void run() {     //TODO move this to the server
 
             askNickname();
 
-            while(true) {
+            while (true) {
                 try {
 
                     String message = in.readLine();
 
-                    if(message.equals("who")){
+                    if (message.equals("/who")) {
 
                         sendWho();
+
+                    } else if (isPrivate) {
+
+                        String privMessage = getMessage(message);
+                        sendPrivateMessage(privSw, privMessage);
+
+                    } else if (message.startsWith("/privChat_")) {
+
+                        privateMessage(message);
 
                     } else {
 
@@ -124,7 +136,7 @@ public class Server {
             }
         }
 
-        private void askNickname(){
+        private void askNickname() {
 
             out.println("Nickname?");
 
@@ -134,9 +146,9 @@ public class Server {
                 Thread.currentThread().setName(nickname);
 
                 nick = nickname;
-                out.println("Welcome " + nickname + "! You can now start chatting" );
+                out.println("Welcome " + nickname + "! You can now start chatting");
 
-            }catch(IOException e){
+            } catch (IOException e) {
 
                 System.out.println(e.getMessage());
 
@@ -150,12 +162,12 @@ public class Server {
 
         }
 
-        private void sendWho(){
+        private void sendWho() {
 
             send("PEOPLE IN THIS CHAT");
             send("*******************");
 
-            for(ServerWorker sw : serverWorkers){
+            for (ServerWorker sw : serverWorkers) {
 
                 send(sw.nick);
 
@@ -165,11 +177,52 @@ public class Server {
 
         }
 
-        private void privateMessage(){
+        private void privateMessage(String message) {
+
+            String privMessage = getMessage(message);
+
+            ServerWorker privSw = checkName(message);
+
+            if (privSw == null) {
+
+                out.println("Wrong nickname... Try again");
+
+
+            } else {
+
+                sendPrivateMessage(privSw, privMessage);
+                this.privSw = privSw;
+                this.isPrivate = true;
+            }
 
         }
 
+        private ServerWorker checkName(String message) {
 
+            String privateNick = message.substring(message.indexOf("_") + 1, message.indexOf(" "));
+
+            System.out.println(privateNick);
+            for (ServerWorker sw : serverWorkers) {
+
+                if (privateNick.equals(sw.nick)) {
+                    return sw;
+                }
+            }
+
+            return null;
+        }
+
+        private String getMessage(String message) {
+
+            return message.substring(message.indexOf(" ") + 1, message.length());
+
+        }
+
+        private void sendPrivateMessage(ServerWorker sw, String privMessage) {
+
+            sw.send(privMessage);
+
+        }
 
     }
 
