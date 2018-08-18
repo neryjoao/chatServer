@@ -3,7 +3,7 @@ package bootcamp.academiadecodigo.org;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -12,12 +12,13 @@ import java.util.concurrent.Executors;
  */
 public class Server {
 
-    ServerSocket serverSocket;
-    LinkedList<ServerWorker> serverWorkers = new LinkedList<>();    // TODO use a synchronized map. Faster access with a map.
+    private ServerSocket serverSocket;
+    private List<ServerWorker> workers = Collections.synchronizedList(new ArrayList<>());
 
 
     //CONSTRUCTOR
     public Server(int port) {
+
         try {
 
             this.serverSocket = new ServerSocket(port);
@@ -46,7 +47,10 @@ public class Server {
                 fixedPool.submit(sw);
 
                 //ADD CLIENT TO THE LIST OF USERS
-                addServerWorker(sw);
+                workers.add(sw);
+
+                Thread thread = new Thread(sw);
+
 
             } catch (IOException e) {
 
@@ -56,21 +60,17 @@ public class Server {
         }
     }
 
-    public synchronized void addServerWorker(ServerWorker sw) {
-
-        serverWorkers.add(sw);
-
-    }
 
 
     public void sendAll(String message, ServerWorker messenger) {
 
-        synchronized (serverWorkers) {
+        synchronized (workers) {
 
-            for (ServerWorker sw : serverWorkers) {
+            for (ServerWorker sw : workers) {
 
                 if (!sw.equals(messenger)) {
 
+                    System.out.println("HERE");
                     sw.send(Thread.currentThread().getName() + ": " + message);
 
                 }
@@ -93,14 +93,14 @@ public class Server {
 
             this.socket = socket;
 
-            out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(socket.getOutputStream(), true);
 
         }
 
 
         @Override
-        public void run() {     //TODO move this to the server
+        public void run() {
 
             askNickname();
 
@@ -108,10 +108,14 @@ public class Server {
                 try {
 
                     String message = in.readLine();
-
                     if (message.equals("/who")) {
 
                         sendWho();
+
+                    }else if (message.equals("/quitPriv")){
+
+                        this.isPrivate = false;
+                        this.privSw = null;
 
                     } else if (isPrivate) {
 
@@ -122,11 +126,13 @@ public class Server {
 
                         privateMessage(message);
 
+
                     } else {
 
                         sendAll(message, this);
 
                     }
+
 
                 } catch (IOException e) {
 
@@ -167,7 +173,7 @@ public class Server {
             send("PEOPLE IN THIS CHAT");
             send("*******************");
 
-            for (ServerWorker sw : serverWorkers) {
+            for (ServerWorker sw : workers) {
 
                 send(sw.nick);
 
@@ -202,7 +208,7 @@ public class Server {
             String privateNick = message.substring(message.indexOf("_") + 1, message.indexOf(" "));
 
             System.out.println(privateNick);
-            for (ServerWorker sw : serverWorkers) {
+            for (ServerWorker sw : workers) {
 
                 if (privateNick.equals(sw.nick)) {
                     return sw;
@@ -220,7 +226,7 @@ public class Server {
 
         private void sendPrivateMessage(ServerWorker sw, String privMessage) {
 
-            sw.send(privMessage);
+            sw.send(this.nick + "[private Message]: " +privMessage);
 
         }
 
