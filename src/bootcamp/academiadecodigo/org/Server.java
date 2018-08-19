@@ -33,7 +33,8 @@ public class Server {
 
     public void start() {
 
-        ExecutorService fixedPool = Executors.newFixedThreadPool(1000);
+        // In case we want to create a fixed pool. Currently creating a thread per new client.
+        //ExecutorService fixedPool = Executors.newFixedThreadPool(1000);
 
         while (true) {
 
@@ -44,12 +45,14 @@ public class Server {
 
                 ServerWorker sw = new ServerWorker(socket);
 
-                fixedPool.submit(sw);
-
                 //ADD CLIENT TO THE LIST OF USERS
                 workers.add(sw);
 
+                // Alternative to create a new thread
+                //fixedPool.submit(sw);
+
                 Thread thread = new Thread(sw);
+                thread.start();
 
 
             } catch (IOException e) {
@@ -61,7 +64,6 @@ public class Server {
     }
 
 
-
     public void sendAll(String message, ServerWorker messenger) {
 
         synchronized (workers) {
@@ -70,7 +72,6 @@ public class Server {
 
                 if (!sw.equals(messenger)) {
 
-                    System.out.println("HERE");
                     sw.send(Thread.currentThread().getName() + ": " + message);
 
                 }
@@ -81,20 +82,21 @@ public class Server {
 
     //INNER CLASS FOR THE SERVER WORKER
     public class ServerWorker implements Runnable {
-        Socket socket;
-        PrintWriter out;
-        BufferedReader in;
-        String nick;
-        boolean isPrivate = false;      // TODO private chat
-        ServerWorker privSw;
+
+        private Socket socket;
+        private BufferedWriter out;
+        private BufferedReader in;
+        private String nick;
+        private boolean isPrivate = false;
+        private ServerWorker privSw;
 
         //CONSTRUCTOR
-        public ServerWorker(Socket socket) throws IOException {     //Throwing exception to the server where server worker is initiated.
+        public ServerWorker(Socket socket) throws IOException {
 
             this.socket = socket;
 
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(socket.getOutputStream(), true);
+            out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
         }
 
@@ -112,7 +114,7 @@ public class Server {
 
                         sendWho();
 
-                    }else if (message.equals("/quitPriv")){
+                    } else if (message.equals("/quitPriv")) {
 
                         this.isPrivate = false;
                         this.privSw = null;
@@ -144,15 +146,19 @@ public class Server {
 
         private void askNickname() {
 
-            out.println("Nickname?");
-
             try {
+
+                out.write("Nickname?");
+                out.newLine();
+                out.flush();
 
                 String nickname = in.readLine();
                 Thread.currentThread().setName(nickname);
 
                 nick = nickname;
-                out.println("Welcome " + nickname + "! You can now start chatting");
+                out.write("Welcome " + nickname + "! You can now start chatting");
+                out.newLine();
+                out.flush();
 
             } catch (IOException e) {
 
@@ -164,7 +170,17 @@ public class Server {
 
         private void send(String message) {
 
-            out.println(message);
+            try {
+
+                out.write(message);
+                out.newLine();
+                out.flush();
+
+            } catch (IOException e) {
+
+                System.out.println(e.getMessage());
+
+            }
 
         }
 
@@ -191,7 +207,16 @@ public class Server {
 
             if (privSw == null) {
 
-                out.println("Wrong nickname... Try again");
+                try {
+                    out.write("Wrong nickname... Try again");
+                    out.newLine();
+                    out.flush();
+
+                } catch (IOException e) {
+
+                    System.out.println(e.getMessage());
+
+                }
 
 
             } else {
@@ -199,6 +224,7 @@ public class Server {
                 sendPrivateMessage(privSw, privMessage);
                 this.privSw = privSw;
                 this.isPrivate = true;
+
             }
 
         }
@@ -226,7 +252,7 @@ public class Server {
 
         private void sendPrivateMessage(ServerWorker sw, String privMessage) {
 
-            sw.send(this.nick + "[private Message]: " +privMessage);
+            sw.send(this.nick + "[private Message]: " + privMessage);
 
         }
 
